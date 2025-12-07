@@ -16,6 +16,12 @@ class MatrixSNPSystem:
         self.__set_neuron_order()
         self.__set_rule_order()
 
+        # Create reverse lookup for rule -> neuron mapping (optimization)
+        self.rule_to_neuron_map = {}
+        for neuron_idx, rules in self.neuron_rule_map.items():
+            for rule_idx in rules:
+                self.rule_to_neuron_map[rule_idx] = neuron_idx
+
         self.config_vct = self.__init_config_vct()
         self.spike_train_vct = self.__init_spike_train_vct()
         self.adj_mx = self.__init_adj_mx()
@@ -484,7 +490,5 @@ class MatrixSNPSystem:
         return activatable_rules_mx, active_rules_in_neuron
 
     def __get_mapped_neuron(self, rule_idx: int):
-        neuron_idx = next(
-            key for key, val in self.neuron_rule_map.items() if rule_idx in val
-        )
-        return neuron_idx
+        # Use O(1) lookup instead of O(n) search
+        return self.rule_to_neuron_map[rule_idx]
