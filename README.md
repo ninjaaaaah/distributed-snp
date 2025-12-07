@@ -2,6 +2,7 @@
 
 This directory contains a standalone version of the SNP system simulator that can be used independently of the FastAPI web server.
 
+
 ## Features
 
 - **No web server required**: Use the simulator directly from Python code or command line
