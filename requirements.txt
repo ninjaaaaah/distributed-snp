@@ -1,2 +1,3 @@
 pydantic
 numpy
+cupy-cuda12x  # For GPU acceleration (optional, requires NVIDIA GPU with CUDA 12.x)

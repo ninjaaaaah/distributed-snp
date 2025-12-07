@@ -9,7 +9,7 @@ from pathlib import Path
 # Add parent directory to path to import standalone module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from simulate import simulate_all, simulate_all_last_only, simulate_step
+from main.simulate import simulate_all, simulate_all_last_only, simulate_step
 import json
 
 

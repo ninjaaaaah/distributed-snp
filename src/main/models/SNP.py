@@ -99,7 +99,7 @@ class MatrixSNPSystem:
         Validates the result of the simulation
         """
         for i in range(self.neuron_count):
-            if re.match(str(self.expected[i]), str(self.content[i])) is None:
+            if re.fullmatch(str(self.expected[i]), str(self.content[i])) is None:
                 return False
 
         return True
@@ -122,11 +122,16 @@ class MatrixSNPSystem:
         self.decisions = np.append(self.decisions, [decision], axis=0).astype(object)
 
     def __check_halt_conditions(self):
-        self.halted = (
-            np.all(self.indicator_vct == 0)
-            and np.all(self.delay_status_vct == 0)
-            and np.all(self.spike_train_vct[self.input_keys] == "")
+        # Check if no rules can fire and no delays are pending
+        no_active_rules = np.all(self.indicator_vct == 0)
+        no_pending_delays = np.all(self.delay_status_vct == 0)
+
+        # Only check input spike trains if input neurons exist
+        input_exhausted = len(self.input_keys) == 0 or np.all(
+            self.spike_train_vct[self.input_keys] == ""
         )
+
+        self.halted = no_active_rules and no_pending_delays and input_exhausted
 
     def __update_content(self):
         self.content = self.config_vct.copy().astype(object)

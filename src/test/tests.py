@@ -1,6 +1,6 @@
 import unittest
-from main.SNP import MatrixSNPSystem
-from models.types import SNPSystem
+from main.models.SNP import MatrixSNPSystem
+from main.models.types import SNPSystem
 import json
 
 
