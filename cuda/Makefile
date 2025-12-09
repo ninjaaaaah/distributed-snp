@@ -160,7 +160,11 @@ run-dist: $(TARGET_DIST)
 	@echo "Running distributed version with dimensions: $(ARGS)"
 	@echo "Note: Using 2 MPI processes by default"
 	@echo "=========================================="
-	mpirun -np 2 ./$(TARGET_DIST) $(ARGS)
+	mpirun -np 2 \
+		--host localhost,10.0.0.2 \
+	 	--mca btl_tcp_if_include ens5 \
+		--mca oob_tcp_if_include ens5 \
+		./$(TARGET_DIST) $(ARGS)
 
 ###############################
 # Clean
