@@ -1,10 +1,9 @@
-#include "mpi_utils.h"
-#include "cuda_utils.h"
-#include "matrix_ops.h"
+#include "matrix_mul/matrix_mul.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
+#include <cmath>
 
 // Get current time in seconds (with microsecond precision)
 double getTime() {
@@ -13,19 +12,42 @@ double getTime() {
     return tv.tv_sec + tv.tv_usec * 1e-6;
 }
 
+// Initialize matrix with random floating-point numbers
+void initializeMatrix(float* matrix, int rows, int cols, unsigned int seed) {
+    srand(seed);
+    for (int i = 0; i < rows * cols; i++) {
+        matrix[i] = (float)rand() / (float)RAND_MAX * 10.0f; // Random values [0, 10)
+    }
+}
+
+// Print a matrix (for debugging small matrices)
+void printMatrix(const float* matrix, int rows, int cols, const char* name) {
+    printf("\nMatrix %s (%dx%d):\n", name, rows, cols);
+    
+    // Only print small matrices to avoid flooding the output
+    int maxPrint = 10;
+    int printRows = rows < maxPrint ? rows : maxPrint;
+    int printCols = cols < maxPrint ? cols : maxPrint;
+    
+    for (int i = 0; i < printRows; i++) {
+        for (int j = 0; j < printCols; j++) {
+            printf("%8.3f ", matrix[i * cols + j]);
+        }
+        if (cols > maxPrint) printf("...");
+        printf("\n");
+    }
+    
+    if (rows > maxPrint) {
+        printf("...\n");
+    }
+    printf("\n");
+}
+
 int main(int argc, char** argv) {
-    int rank, size;
-    double total_start, total_end;
-    double comm_time = 0.0, comp_time = 0.0;
-    
-    // Initialize MPI
-    initializeMPI(&argc, &argv, &rank, &size);
-    total_start = getTime();
-    
     // Matrix dimensions (can be passed as command-line arguments)
-    int M = 2048;  // Rows of A and C
-    int K = 2048;  // Cols of A, Rows of B
-    int N = 2048;  // Cols of B and C
+    int M = 4;  // Rows of A and C
+    int K = 4;  // Cols of A, Rows of B
+    int N = 4;  // Cols of B and C
     
     if (argc >= 4) {
         M = atoi(argv[1]);
@@ -33,165 +55,76 @@ int main(int argc, char** argv) {
         N = atoi(argv[3]);
     }
     
-    if (rank == 0) {
-        printf("Matrix dimensions: A(%dx%d) * B(%dx%d) = C(%dx%d)\n", 
-               M, K, K, N, M, N);
-        printf("Total elements to compute: %d\n", M * N);
-        printf("=================================================\n\n");
+    printf("=================================================\n");
+    printf("CPU Matrix Multiplication Example\n");
+    printf("=================================================\n");
+    printf("Matrix dimensions: A(%dx%d) * B(%dx%d) = C(%dx%d)\n", 
+           M, K, K, N, M, N);
+    printf("Total elements to compute: %d\n", M * N);
+    printf("=================================================\n\n");
+    
+    // Allocate matrices
+    float* A = (float*)malloc(M * K * sizeof(float));
+    float* B = (float*)malloc(K * N * sizeof(float));
+    float* C = (float*)malloc(M * N * sizeof(float));
+    
+    if (!A || !B || !C) {
+        fprintf(stderr, "Error: Failed to allocate memory for matrices\n");
+        return EXIT_FAILURE;
     }
     
-    // Initialize CUDA
-    initializeCUDA(rank);
+    // Initialize matrices with random values
+    printf("Initializing matrices...\n");
+    initializeMatrix(A, M, K, 12345);
+    initializeMatrix(B, K, N, 67890);
     
-    // Calculate local dimensions
-    int rows_per_proc = M / size;
-    int remainder = M % size;
-    int localRows = rows_per_proc + (rank < remainder ? 1 : 0);
-    
-    if (rank == 0) {
-        printf("\n=================================================\n");
-        printf("Work Distribution:\n");
-        printf("=================================================\n");
-    }
-    printf("[Rank %d] Processing %d rows (%.2f%% of total)\n", 
-           rank, localRows, 100.0 * localRows / M);
-    
-    // Allocate host memory
-    float *A = NULL, *B = NULL, *C = NULL;
-    float *localA = (float*)malloc(localRows * K * sizeof(float));
-    float *localB = (float*)malloc(K * N * sizeof(float));
-    float *localC = (float*)malloc(localRows * N * sizeof(float));
-    
-    // Master process initializes matrices
-    if (rank == 0) {
-        A = (float*)malloc(M * K * sizeof(float));
-        B = (float*)malloc(K * N * sizeof(float));
-        C = (float*)malloc(M * N * sizeof(float));
-        
-        printf("\n[Rank 0] Initializing matrices...\n");
-        initializeMatrix(A, M, K, time(NULL));
-        initializeMatrix(B, K, N, time(NULL) + 1);
-        
-        // Optionally print small matrices
-        if (M <= 10 && K <= 10 && N <= 10) {
-            printMatrix(A, M, K, "A");
-            printMatrix(B, K, N, "B");
-        }
+    // Print matrices if they're small enough
+    if (M <= 10 && K <= 10 && N <= 10) {
+        printMatrix(A, M, K, "A");
+        printMatrix(B, K, N, "B");
     }
     
-    // Distribute data
-    printf("\n=================================================\n");
-    printf("Data Distribution Phase\n");
-    printf("=================================================\n");
+    // Perform matrix multiplication
+    printf("Performing matrix multiplication (CPU)...\n");
+    double start = getTime();
+    matrixMultiply(A, B, C, M, K, N);
+    double end = getTime();
     
-    double comm_start = getTime();
-    distributeMatrixA(A, localA, M, K, localRows, rank, size);
-    distributeMatrixB(B, localB, K, N, rank);
-    comm_time += getTime() - comm_start;
+    double elapsed = end - start;
+    printf("Computation time: %.6f seconds\n", elapsed);
     
-    // Allocate device memory
-    float *d_A, *d_B, *d_C;
-    CUDA_CHECK(cudaMalloc(&d_A, localRows * K * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&d_B, K * N * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&d_C, localRows * N * sizeof(float)));
+    // Calculate performance metrics
+    double gflops = (2.0 * M * K * N) / (elapsed * 1e9);
+    printf("Performance: %.3f GFLOPS\n", gflops);
     
-    // Copy data to device
-    printf("\n[Rank %d] Copying data to GPU...\n", rank);
-    comm_start = getTime();
-    CUDA_CHECK(cudaMemcpy(d_A, localA, localRows * K * sizeof(float), 
-                          cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_B, localB, K * N * sizeof(float), 
-                          cudaMemcpyHostToDevice));
-    comm_time += getTime() - comm_start;
+    // Print result if matrix is small enough
+    if (M <= 10 && N <= 10) {
+        printMatrix(C, M, N, "C");
+    }
     
-    // Perform matrix multiplication on GPU
-    printf("\n=================================================\n");
-    printf("GPU Computation Phase\n");
-    printf("=================================================\n");
-    printf("[Rank %d] Starting CUDA matrix multiplication...\n", rank);
-    
-    double comp_start = getTime();
-    matrixMultiplyCUDA(d_A, d_B, d_C, localRows, K, N);
-    comp_time += getTime() - comp_start;
-    
-    printf("[Rank %d] CUDA computation completed.\n", rank);
-    
-    // Copy result back to host
-    comm_start = getTime();
-    CUDA_CHECK(cudaMemcpy(localC, d_C, localRows * N * sizeof(float), 
-                          cudaMemcpyDeviceToHost));
-    comm_time += getTime() - comm_start;
-    
-    // Gather results
-    printf("\n=================================================\n");
-    printf("Result Gathering Phase\n");
-    printf("=================================================\n");
-    
-    comm_start = getTime();
-    gatherResultMatrix(localC, C, M, N, localRows, rank, size);
-    comm_time += getTime() - comm_start;
-    
-    total_end = getTime();
-    
-    // Master process verifies and prints results
-    if (rank == 0) {
-        printf("\n=================================================\n");
-        printf("Verification Phase\n");
-        printf("=================================================\n");
-        
-        if (M <= 1000 && N <= 1000) {
-            bool correct = verifyResult(A, B, C, M, K, N, 0.01f);
-            if (!correct) {
-                printf("WARNING: Result verification failed!\n");
-            }
-        } else {
-            printf("Skipping verification for large matrices.\n");
+    // Verify a sample element (middle of matrix)
+    if (M > 0 && N > 0) {
+        int i = M / 2;
+        int j = N / 2;
+        float expected = 0.0f;
+        for (int k = 0; k < K; k++) {
+            expected += A[i * K + k] * B[k * N + j];
         }
-        
-        // Optionally print result
-        if (M <= 10 && N <= 10) {
-            printMatrix(C, M, N, "C (Result)");
-        }
-        
-        // Print performance metrics
-        printf("\n=================================================\n");
-        printf("Performance Metrics\n");
-        printf("=================================================\n");
-        printf("Total execution time:     %.6f seconds\n", total_end - total_start);
-        printf("Communication time:       %.6f seconds (%.2f%%)\n", 
-               comm_time, 100.0 * comm_time / (total_end - total_start));
-        printf("Computation time:         %.6f seconds (%.2f%%)\n", 
-               comp_time, 100.0 * comp_time / (total_end - total_start));
-        
-        // Calculate GFLOPS
-        double flops = 2.0 * M * N * K; // 2 operations per element (multiply + add)
-        double gflops = (flops / comp_time) / 1e9;
-        printf("Computational throughput: %.2f GFLOPS\n", gflops);
-        
-        // Memory bandwidth
-        double memory_bytes = (M * K + K * N + M * N) * sizeof(float);
-        double bandwidth = (memory_bytes / (total_end - total_start)) / (1024.0 * 1024.0 * 1024.0);
-        printf("Effective bandwidth:      %.2f GB/s\n", bandwidth);
-        
-        printf("=================================================\n");
+        float actual = C[i * N + j];
+        printf("\nVerification (element C[%d][%d]):\n", i, j);
+        printf("  Expected: %.6f\n", expected);
+        printf("  Actual:   %.6f\n", actual);
+        printf("  Match:    %s\n", (fabs(expected - actual) < 1e-3) ? "YES" : "NO");
     }
     
     // Clean up
-    CUDA_CHECK(cudaFree(d_A));
-    CUDA_CHECK(cudaFree(d_B));
-    CUDA_CHECK(cudaFree(d_C));
+    free(A);
+    free(B);
+    free(C);
     
-    free(localA);
-    free(localB);
-    free(localC);
+    printf("\n=================================================\n");
+    printf("Matrix multiplication completed successfully!\n");
+    printf("=================================================\n");
     
-    if (rank == 0) {
-        free(A);
-        free(B);
-        free(C);
-        printf("\nProgram completed successfully!\n");
-    }
-    
-    finalizeMPI();
-    return 0;
+    return EXIT_SUCCESS;
 }

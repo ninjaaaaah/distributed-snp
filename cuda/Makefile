@@ -1,147 +1,192 @@
-# Makefile for Distributed Matrix Multiplication (CUDA + MPI)
-# Targets: all, clean, deploy, run
+# Makefile for Matrix Multiplication
+# Supports CPU, GPU (CUDA), and Distributed (MPI+CUDA) implementations
+#
+# Usage:
+#   make cpu          - Build CPU-only version
+#   make gpu          - Build GPU (CUDA) version
+#   make distributed  - Build distributed (MPI+CUDA) version
+#   make all          - Build all versions
+#   make clean        - Remove all build artifacts
+#   make run-cpu      - Run CPU version
+#   make run-gpu      - Run GPU version
+#   make run-dist     - Run distributed version with MPI
 
 # Compiler settings
+CXX = g++
 NVCC = nvcc
 MPICXX = mpicxx
-TARGET = matmul_dist
 
 # Directories
 SRC_DIR = src
+MATRIX_MUL_DIR = $(SRC_DIR)/matrix_mul
+CPU_DIR = $(MATRIX_MUL_DIR)/cpu
+GPU_DIR = $(MATRIX_MUL_DIR)/gpu
+DIST_DIR = $(MATRIX_MUL_DIR)/distributed
 BUILD_DIR = build
 
-# CUDA compute capability for T4 GPU (7.5)
-CUDA_ARCH = -arch=sm_75
+# Target names
+TARGET_CPU = $(BUILD_DIR)/matmul_cpu
+TARGET_GPU = $(BUILD_DIR)/matmul_gpu
+TARGET_DIST = $(BUILD_DIR)/matmul_dist
 
-# Compiler flags
-NVCC_FLAGS = $(CUDA_ARCH) -O3 -Xcompiler -fPIC
-MPICXX_FLAGS = -O3 -Wall -I$(SRC_DIR)
+# CUDA settings
+CUDA_ARCH = -arch=sm_75
 CUDA_INCLUDE = -I/usr/local/cuda/include
 CUDA_LIBS = -L/usr/local/cuda/lib64 -lcudart
 
-# Source files
-CU_SOURCES = $(SRC_DIR)/cuda_kernels.cu
-CPP_SOURCES = $(SRC_DIR)/main.cpp $(SRC_DIR)/mpi_utils.cpp $(SRC_DIR)/matrix_ops.cpp
-
-# Object files
-CU_OBJECTS = $(BUILD_DIR)/cuda_kernels.o
-CPP_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mpi_utils.o $(BUILD_DIR)/matrix_ops.o
-ALL_OBJECTS = $(CU_OBJECTS) $(CPP_OBJECTS)
-
-# Deployment settings (modify these for your environment)
-SECONDARY_HOST ?= secondary
-SECONDARY_USER ?= shared
-SECONDARY_PATH ?= /home/shared/distributed-snp/cuda
-HOSTFILE ?= hostfile
+# Compiler flags
+CXX_FLAGS = -O3 -Wall -std=c++11 -I$(MATRIX_MUL_DIR)
+NVCC_FLAGS = $(CUDA_ARCH) -O3 -Xcompiler -fPIC -std=c++11
+MPICXX_FLAGS = -O3 -Wall -std=c++11 -I$(MATRIX_MUL_DIR) $(CUDA_INCLUDE)
 
 # Default target
-all: $(BUILD_DIR)/$(TARGET)
+.DEFAULT_GOAL := help
+
+# Help target
+.PHONY: help
+help:
+	@echo "Matrix Multiplication Build System"
+	@echo "==================================="
+	@echo ""
+	@echo "Available targets:"
+	@echo "  make cpu          - Build CPU-only version"
+	@echo "  make gpu          - Build GPU (CUDA) version"
+	@echo "  make distributed  - Build distributed (MPI+CUDA) version"
+	@echo "  make all          - Build all versions"
+	@echo "  make clean        - Remove all build artifacts"
+	@echo ""
+	@echo "Run targets:"
+	@echo "  make run-cpu [ARGS='M K N']     - Run CPU version"
+	@echo "  make run-gpu [ARGS='M K N']     - Run GPU version"
+	@echo "  make run-dist [ARGS='M K N']    - Run distributed version"
+	@echo ""
+	@echo "Example:"
+	@echo "  make cpu && make run-cpu ARGS='512 512 512'"
+	@echo ""
+
+# Build all versions
+.PHONY: all
+all: cpu gpu distributed
+	@echo "All versions built successfully!"
 
 # Create build directory
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Compile CUDA source files
-$(BUILD_DIR)/cuda_kernels.o: $(SRC_DIR)/cuda_kernels.cu $(SRC_DIR)/cuda_utils.h | $(BUILD_DIR)
+###############################
+# CPU Implementation
+###############################
+
+.PHONY: cpu
+cpu: $(TARGET_CPU)
+
+$(TARGET_CPU): $(SRC_DIR)/main.cpp $(CPU_DIR)/matrix_mul_cpu.cpp $(MATRIX_MUL_DIR)/matrix_mul.h | $(BUILD_DIR)
+	@echo "Building CPU version..."
+	$(CXX) $(CXX_FLAGS) -o $@ $(SRC_DIR)/main.cpp $(CPU_DIR)/matrix_mul_cpu.cpp
+	@echo "CPU version built: $@"
+
+###############################
+# GPU Implementation (CUDA)
+###############################
+
+.PHONY: gpu
+gpu: $(TARGET_GPU)
+
+# Compile CUDA kernel
+$(BUILD_DIR)/cuda_kernels.o: $(GPU_DIR)/cuda_kernels.cu $(GPU_DIR)/cuda_utils.h | $(BUILD_DIR)
+	@echo "Compiling CUDA kernels..."
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
-# Compile C++ source files
-$(BUILD_DIR)/main.o: $(SRC_DIR)/main.cpp $(SRC_DIR)/mpi_utils.h $(SRC_DIR)/cuda_utils.h $(SRC_DIR)/matrix_ops.h | $(BUILD_DIR)
-	$(MPICXX) $(MPICXX_FLAGS) $(CUDA_INCLUDE) -c $< -o $@
+# Build GPU version
+$(TARGET_GPU): $(SRC_DIR)/main.cpp $(GPU_DIR)/matrix_mul_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(MATRIX_MUL_DIR)/matrix_mul.h | $(BUILD_DIR)
+	@echo "Building GPU version..."
+	$(NVCC) $(NVCC_FLAGS) -o $@ $(SRC_DIR)/main.cpp $(GPU_DIR)/matrix_mul_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(CUDA_LIBS)
+	@echo "GPU version built: $@"
 
-$(BUILD_DIR)/mpi_utils.o: $(SRC_DIR)/mpi_utils.cpp $(SRC_DIR)/mpi_utils.h | $(BUILD_DIR)
+###############################
+# Distributed Implementation (MPI+CUDA)
+###############################
+
+.PHONY: distributed
+distributed: $(TARGET_DIST)
+
+# Compile CUDA kernels for distributed version
+$(BUILD_DIR)/cuda_kernels_dist.o: $(DIST_DIR)/cuda_kernels.cu $(DIST_DIR)/cuda_utils.h | $(BUILD_DIR)
+	@echo "Compiling CUDA kernels for distributed version..."
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+# Compile MPI utilities
+$(BUILD_DIR)/mpi_utils.o: $(DIST_DIR)/mpi_utils.cpp $(DIST_DIR)/mpi_utils.h | $(BUILD_DIR)
+	@echo "Compiling MPI utilities..."
 	$(MPICXX) $(MPICXX_FLAGS) -c $< -o $@
 
-$(BUILD_DIR)/matrix_ops.o: $(SRC_DIR)/matrix_ops.cpp $(SRC_DIR)/matrix_ops.h | $(BUILD_DIR)
+# Compile matrix operations
+$(BUILD_DIR)/matrix_ops.o: $(DIST_DIR)/matrix_ops.cpp $(DIST_DIR)/matrix_ops.h | $(BUILD_DIR)
+	@echo "Compiling matrix operations..."
 	$(MPICXX) $(MPICXX_FLAGS) -c $< -o $@
 
-# Link all object files
-$(BUILD_DIR)/$(TARGET): $(ALL_OBJECTS)
+# Compile distributed main
+$(BUILD_DIR)/main_dist.o: $(DIST_DIR)/main.cpp $(DIST_DIR)/mpi_utils.h $(DIST_DIR)/cuda_utils.h $(DIST_DIR)/matrix_ops.h | $(BUILD_DIR)
+	@echo "Compiling distributed main..."
+	$(MPICXX) $(MPICXX_FLAGS) -c $< -o $@
+
+# Link distributed version
+$(TARGET_DIST): $(BUILD_DIR)/main_dist.o $(BUILD_DIR)/mpi_utils.o $(BUILD_DIR)/matrix_ops.o $(BUILD_DIR)/cuda_kernels_dist.o | $(BUILD_DIR)
+	@echo "Linking distributed version..."
 	$(MPICXX) $(MPICXX_FLAGS) -o $@ $^ $(CUDA_LIBS)
-	@echo ""
-	@echo "==============================================="
-	@echo "Build completed successfully!"
-	@echo "Executable: $(BUILD_DIR)/$(TARGET)"
-	@echo "==============================================="
+	@echo "Distributed version built: $@"
 
-# Clean build artifacts
+###############################
+# Run Targets
+###############################
+
+# Default matrix dimensions
+ARGS ?= 512 512 512
+
+.PHONY: run-cpu
+run-cpu: $(TARGET_CPU)
+	@echo "Running CPU version with dimensions: $(ARGS)"
+	@echo "=========================================="
+	./$(TARGET_CPU) $(ARGS)
+
+.PHONY: run-gpu
+run-gpu: $(TARGET_GPU)
+	@echo "Running GPU version with dimensions: $(ARGS)"
+	@echo "=========================================="
+	./$(TARGET_GPU) $(ARGS)
+
+.PHONY: run-dist
+run-dist: $(TARGET_DIST)
+	@echo "Running distributed version with dimensions: $(ARGS)"
+	@echo "Note: Using 2 MPI processes by default"
+	@echo "=========================================="
+	mpirun -np 2 ./$(TARGET_DIST) $(ARGS)
+
+###############################
+# Clean
+###############################
+
+.PHONY: clean
 clean:
+	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR)
-	@echo "Build directory cleaned."
+	@echo "Clean complete!"
 
-# Deploy to secondary node
-deploy: all
+###############################
+# Info
+###############################
+
+.PHONY: info
+info:
+	@echo "Build Configuration:"
+	@echo "==================="
+	@echo "CXX       = $(CXX)"
+	@echo "NVCC      = $(NVCC)"
+	@echo "MPICXX    = $(MPICXX)"
+	@echo "CUDA_ARCH = $(CUDA_ARCH)"
+	@echo "BUILD_DIR = $(BUILD_DIR)"
 	@echo ""
-	@echo "==============================================="
-	@echo "Deploying to secondary node..."
-	@echo "==============================================="
-	@ssh $(SECONDARY_USER)@$(SECONDARY_HOST) "mkdir -p $(SECONDARY_PATH)/build"
-	@scp $(BUILD_DIR)/$(TARGET) $(SECONDARY_USER)@$(SECONDARY_HOST):$(SECONDARY_PATH)/build/
-	@if [ -f $(HOSTFILE) ]; then \
-		scp $(HOSTFILE) $(SECONDARY_USER)@$(SECONDARY_HOST):$(SECONDARY_PATH)/; \
-	fi
-	@echo "Deployment completed!"
-	@echo "==============================================="
-
-# Run the program locally (single node, useful for testing)
-run-local: all
-	@echo ""
-	@echo "==============================================="
-	@echo "Running on local node only..."
-	@echo "==============================================="
-	mpirun -np 1 $(BUILD_DIR)/$(TARGET)
-
-# Run the program across both nodes
-run: all
-	@echo ""
-	@echo "==============================================="
-	@echo "Running distributed across nodes..."
-	@echo "==============================================="
-	mpirun -np 2 \
-		--host localhost,$(SECONDARY_HOST) \
-	 	--mca btl_tcp_if_include ens5 \
-		--mca oob_tcp_if_include ens5 \
-		$(BUILD_DIR)/$(TARGET)
-
-# Run with custom matrix dimensions (M K N)
-run-custom: all
-	@if [ -z "$(M)" ] || [ -z "$(K)" ] || [ -z "$(N)" ]; then \
-		echo "Error: Please specify matrix dimensions: M=<rows> K=<cols> N=<cols>"; \
-		echo "Example: make run-custom M=4096 K=4096 N=4096"; \
-		exit 1; \
-	fi
-	@echo ""
-	@echo "==============================================="
-	@echo "Running with custom dimensions: $(M)x$(K) * $(K)x$(N)"
-	@echo "==============================================="
-	mpirun -np 2 \
-		--host localhost,$(SECONDARY_HOST) \
-	 	--mca btl_tcp_if_include ens5 \
-		--mca oob_tcp_if_include ens5 \
-		$(BUILD_DIR)/$(TARGET)
-
-# Deploy and run
-deploy-run: deploy run
-
-# Help target
-help:
-	@echo "Available targets:"
-	@echo "  all          - Build the project (default)"
-	@echo "  clean        - Remove build artifacts"
-	@echo "  run-local    - Run on single node (testing)"
-	@echo "  run          - Run distributed across nodes"
-	@echo "  deploy       - Copy executable to secondary node"
-	@echo "  deploy-run   - Deploy and run"
-	@echo "  run-custom   - Run with custom matrix dimensions"
-	@echo "                 Usage: make run-custom M=2048 K=2048 N=2048"
-	@echo ""
-	@echo "Configuration variables:"
-	@echo "  SECONDARY_HOST - Hostname of secondary node (default: secondary)"
-	@echo "  SECONDARY_USER - Username on secondary node (default: shared)"
-	@echo "  SECONDARY_PATH - Path on secondary node (default: /home/shared/distributed-snp/cuda)"
-	@echo "  HOSTFILE       - MPI hostfile (default: hostfile)"
-	@echo ""
-	@echo "Example:"
-	@echo "  make SECONDARY_HOST=node2 HOSTFILE=myhosts run"
-
-.PHONY: all clean run run-local deploy deploy-run run-custom help
+	@echo "Targets:"
+	@echo "  CPU:         $(TARGET_CPU)"
+	@echo "  GPU:         $(TARGET_GPU)"
+	@echo "  Distributed: $(TARGET_DIST)"
