@@ -18,10 +18,10 @@ MPICXX = mpicxx
 
 # Directories
 SRC_DIR = src
-MATRIX_MUL_DIR = $(SRC_DIR)/matrix_mul
-CPU_DIR = $(MATRIX_MUL_DIR)/cpu
-GPU_DIR = $(MATRIX_MUL_DIR)/gpu
-DIST_DIR = $(MATRIX_MUL_DIR)/distributed
+LINALG_DIR = $(SRC_DIR)/linear_algebra
+CPU_DIR = $(LINALG_DIR)/cpu
+GPU_DIR = $(LINALG_DIR)/gpu
+DIST_DIR = $(LINALG_DIR)/distributed
 BUILD_DIR = build
 
 # Target names
@@ -35,9 +35,10 @@ CUDA_INCLUDE = -I/usr/local/cuda/include
 CUDA_LIBS = -L/usr/local/cuda/lib64 -lcudart
 
 # Compiler flags
-CXX_FLAGS = -O3 -Wall -std=c++11 -I$(MATRIX_MUL_DIR)
-NVCC_FLAGS = $(CUDA_ARCH) -O3 -Xcompiler -fPIC -std=c++11
-MPICXX_FLAGS = -O3 -Wall -std=c++11 -I$(MATRIX_MUL_DIR) $(CUDA_INCLUDE)
+CXX_FLAGS = -O3 -Wall -std=c++14 -I$(SRC_DIR)
+NVCC_FLAGS = $(CUDA_ARCH) -O3 -Xcompiler -fPIC -std=c++14 -DENABLE_GPU -I$(SRC_DIR)
+GPU_CXX_FLAGS = -O3 -Wall -std=c++14 -I$(SRC_DIR) -DENABLE_GPU
+MPICXX_FLAGS = -O3 -Wall -std=c++14 -I$(SRC_DIR) $(CUDA_INCLUDE) -DENABLE_DISTRIBUTED
 
 # Default target
 .DEFAULT_GOAL := help
@@ -80,9 +81,9 @@ $(BUILD_DIR):
 .PHONY: cpu
 cpu: $(TARGET_CPU)
 
-$(TARGET_CPU): $(SRC_DIR)/main.cpp $(CPU_DIR)/matrix_mul_cpu.cpp $(MATRIX_MUL_DIR)/matrix_mul.h | $(BUILD_DIR)
+$(TARGET_CPU): $(SRC_DIR)/main.cpp $(CPU_DIR)/linear_algebra_cpu.cpp $(LINALG_DIR)/linear_algebra.h | $(BUILD_DIR)
 	@echo "Building CPU version..."
-	$(CXX) $(CXX_FLAGS) -o $@ $(SRC_DIR)/main.cpp $(CPU_DIR)/matrix_mul_cpu.cpp
+	$(CXX) $(CXX_FLAGS) -o $@ $(SRC_DIR)/main.cpp $(CPU_DIR)/linear_algebra_cpu.cpp
 	@echo "CPU version built: $@"
 
 ###############################
@@ -97,10 +98,15 @@ $(BUILD_DIR)/cuda_kernels.o: $(GPU_DIR)/cuda_kernels.cu $(GPU_DIR)/cuda_utils.h 
 	@echo "Compiling CUDA kernels..."
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
-# Build GPU version
-$(TARGET_GPU): $(SRC_DIR)/main.cpp $(GPU_DIR)/matrix_mul_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(MATRIX_MUL_DIR)/matrix_mul.h | $(BUILD_DIR)
+$(TARGET_GPU): $(SRC_DIR)/main.cpp $(GPU_DIR)/linear_algebra_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(LINALG_DIR)/linear_algebra.h | $(BUILD_DIR)
 	@echo "Building GPU version..."
-	$(NVCC) $(NVCC_FLAGS) -o $@ $(SRC_DIR)/main.cpp $(GPU_DIR)/matrix_mul_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(CUDA_LIBS)
+	$(CXX) $(GPU_CXX_FLAGS) -o $@ $(SRC_DIR)/main.cpp $(GPU_DIR)/linear_algebra_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(CUDA_LIBS)
+	@echo "GPU version built: $@"
+
+# Build GPU version
+$(TARGET_GPU): $(SRC_DIR)/main.cpp $(GPU_DIR)/linear_algebra_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(LINALG_DIR)/linear_algebra.h | $(BUILD_DIR)
+	@echo "Building GPU version..."
+	$(NVCC) $(NVCC_FLAGS) -DENABLE_GPU -o $@ $(SRC_DIR)/main.cpp $(GPU_DIR)/linear_algebra_gpu.cpp $(BUILD_DIR)/cuda_kernels.o $(CUDA_LIBS)
 	@echo "GPU version built: $@"
 
 ###############################
@@ -131,9 +137,9 @@ $(BUILD_DIR)/main_dist.o: $(DIST_DIR)/main.cpp $(DIST_DIR)/mpi_utils.h $(DIST_DI
 	$(MPICXX) $(MPICXX_FLAGS) -c $< -o $@
 
 # Link distributed version
-$(TARGET_DIST): $(BUILD_DIR)/main_dist.o $(BUILD_DIR)/mpi_utils.o $(BUILD_DIR)/matrix_ops.o $(BUILD_DIR)/cuda_kernels_dist.o | $(BUILD_DIR)
-	@echo "Linking distributed version..."
-	$(MPICXX) $(MPICXX_FLAGS) -o $@ $^ $(CUDA_LIBS)
+$(TARGET_DIST): $(DIST_DIR)/main.cpp $(DIST_DIR)/mpi_utils.cpp $(DIST_DIR)/matrix_ops.cpp $(BUILD_DIR)/cuda_kernels_dist.o | $(BUILD_DIR)
+	@echo "Building Distributed version..."
+	$(MPICXX) $(MPICXX_FLAGS) -o $@ $(DIST_DIR)/main.cpp $(DIST_DIR)/mpi_utils.cpp $(DIST_DIR)/matrix_ops.cpp $(BUILD_DIR)/cuda_kernels_dist.o $(CUDA_LIBS)
 	@echo "Distributed version built: $@"
 
 ###############################

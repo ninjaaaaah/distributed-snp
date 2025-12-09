@@ -4,9 +4,11 @@
 #include <vector>
 #include <string>
 #include "rule.h"
+#include "../linear_algebra/linear_algebra.h"
 
 class SNPSystem {
 private:
+    LinAlg::LinearAlgebra* linAlg;
     int m_neurons;
     int n_rules;
 
@@ -22,12 +24,13 @@ private:
     std::vector<std::vector<int>> adj; // Adjacency List (Graph connections)
     std::vector<Rule> ruleList;
     std::vector<std::vector<int>> neuronToRules;
-    std::vector<std::vector<int>> M;   // Spiking Transition Matrix
+    std::vector<int> M;   // Spiking Transition Matrix (Flattened)
 
 public:
     std::vector<int> STv; // Spike Train Vector (External Input) [cite: 176]
 
     SNPSystem(int neurons);
+    ~SNPSystem();
 
     void addSynapse(int from, int to);
     void setSpikes(int n, int count);

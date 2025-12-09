@@ -1,9 +1,17 @@
-#include "matrix_mul/matrix_mul.h"
+#include "linear_algebra/linear_algebra.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
 #include <cmath>
+#include <memory>
+
+// Include the appropriate implementation based on what's being compiled
+#ifdef ENABLE_GPU
+    #include "linear_algebra/gpu/linear_algebra_gpu.h"
+#else
+    #include "linear_algebra/cpu/linear_algebra_cpu.h"
+#endif
 
 // Get current time in seconds (with microsecond precision)
 double getTime() {
@@ -85,9 +93,20 @@ int main(int argc, char** argv) {
     }
     
     // Perform matrix multiplication
-    printf("Performing matrix multiplication (CPU)...\n");
+    printf("Performing matrix multiplication...\n");
     double start = getTime();
-    matrixMultiply(A, B, C, M, K, N);
+    
+    // Create the appropriate implementation
+    std::unique_ptr<LinAlg::LinearAlgebra> multiplier;
+#ifdef ENABLE_GPU
+    multiplier = std::make_unique<LinAlg::LinearAlgebraGPU>();
+    printf("Using GPU implementation\n");
+#else
+    multiplier = std::make_unique<LinAlg::LinearAlgebraCPU>();
+    printf("Using CPU implementation\n");
+#endif
+    
+    multiplier->multiply(A, B, C, M, K, N);
     double end = getTime();
     
     double elapsed = end - start;
