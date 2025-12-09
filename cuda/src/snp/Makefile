@@ -5,15 +5,21 @@ CXXFLAGS = -Wall -g
 # Directories and Target Names
 BUILD_DIR = ./build
 TARGET    = $(BUILD_DIR)/snp_system
-SRC       = snp.cpp
+SRCS      = snp.cpp snp_system.cpp linear_algebra.cpp sorting.cpp
+OBJS      = $(BUILD_DIR)/snp.o $(BUILD_DIR)/snp_system.o $(BUILD_DIR)/linear_algebra.o $(BUILD_DIR)/sorting.o
 
 # Default rule: Build the executable
 all: $(TARGET)
 
 # Rule to link the executable (creates build dir if missing)
-$(TARGET): $(SRC)
+$(TARGET): $(OBJS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS)
+
+# Rule to compile individual source files
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Rule to run the program
 run: $(TARGET)
