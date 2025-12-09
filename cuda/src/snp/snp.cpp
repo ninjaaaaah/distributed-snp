@@ -239,84 +239,112 @@ public:
     }
 };
 
+// =========================================================
+// 3. Dynamic Sorting Builder
+// =========================================================
 int main() {
-// Mapping IDs:
-    // Inputs: i1(0), i2(1), i3(2)
-    // Sorters: s1(3), s2(4), s3(5)
-    // Outputs: o1(6), o2(7), o3(8)
-    SNPSystem sys(9);
-
-    // --- 1. Topology ---
+    // --- User Configuration ---
+    std::vector<int> inputNumbers = { 
+                                    530, 225, 726, 148, 61, 137, 659, 153, 743, 131, 171, 126, 834, 359, 266, 50, 639, 857, 647, 492, 43, 879, 559, 916, 812, 725, 19, 177, 98, 280, 409, 458, 583, 275, 890, 747, 112, 775, 63, 384, 376, 240, 109, 514, 915, 572, 435, 680, 182, 638, 935, 291, 955, 520, 426, 389, 622, 566, 592, 419, 482, 40, 100, 826, 770, 599, 345, 274, 620, 786, 54, 709, 848, 443, 16, 204, 489, 253, 396, 14, 538, 544, 994, 468, 328, 721, 288, 586, 439, 390, 909, 626, 121, 296, 625, 329, 907, 875, 367, 684
+                                 }; // Change this array to sort different sets
+    int N = inputNumbers.size();
     
-    // Inputs connect to ALL Sorters
-    for(int i=0; i<=2; ++i) {
-        sys.addSynapse(i, 3); // to s1
-        sys.addSynapse(i, 4); // to s2
-        sys.addSynapse(i, 5); // to s3
+    // Calculate total neurons needed
+    // Inputs (N) + Sorters (N) + Outputs (N)
+    int totalNeurons = 3 * N;
+    SNPSystem sys(totalNeurons);
+
+    // ID Ranges
+    int startInput = 0;
+    int startSorter = N;
+    int startOutput = 2 * N;
+
+    // --- 1. Construct Topology ---
+    
+    // A. Connect Inputs to ALL Sorters
+    for(int i = 0; i < N; ++i) {       // Input i
+        for(int s = 0; s < N; ++s) {   // Sorter s
+            sys.addSynapse(startInput + i, startSorter + s);
+        }
     }
 
-    // s1 connects to o1, o2, o3 (accumulates to Min, Med, Max)
-    sys.addSynapse(3, 6);
-    sys.addSynapse(3, 7);
-    sys.addSynapse(3, 8);
-
-    // s2 connects to o2, o3 (accumulates to Med, Max)
-    sys.addSynapse(4, 7);
-    sys.addSynapse(4, 8);
-
-    // s3 connects to o3 (accumulates to Max)
-    sys.addSynapse(5, 8);
-
-    // --- 2. Rules (Priority: Highest spikes first) ---
+    // B. Connect Sorters to Outputs
+    // Sorter k (detects k spikes) connects to outputs [k...N] (Median/Max logic)
+    // IMPORTANT: The paper's logic is inverted in indexing vs standard array.
+    // If we have 4 numbers, Sorter 4 (detects 4 spikes) is the "Min" detector.
+    // It should connect to Output 1 (Min), Output 2, Output 3, Output 4.
+    // Sorter 1 (detects 1 spike) is the "Max" detector. It connects ONLY to Output 4 (Max).
     
-    // Inputs (0,1,2): Rule a*/a -> a;0
-    // "If >= 1 spike, consume 1, produce 1"
-    for(int i=0; i<=2; ++i) {
-        sys.addRule(i, 1, 1, 0, 1, "a*->a");
+    // We map: Sorter s (0..N-1) corresponds to detecting (N-s) spikes.
+    // Wait, let's stick to the paper's diagram logic exactly:
+    // s1 (detects N spikes) -> connects to o1...oN
+    // sN (detects 1 spike)  -> connects to oN
+    
+    for(int s = 0; s < N; ++s) {
+        int sorterID = startSorter + s;
+        // This sorter detects (N - s) spikes.
+        // Let's call index 0 "s1" (detects N), index N-1 "sN" (detects 1)
+        
+        // s1 connects to o1...oN
+        // s2 connects to o2...oN
+        for(int o = s; o < N; ++o) {
+            sys.addSynapse(sorterID, startOutput + o);
+        }
     }
 
-    // Sorter s1 (3): Detects 3 spikes
-    sys.addRule(3, 3, 1, 0, 3, "a^3->a"); // Fire if 3
-    sys.addRule(3, 2, 0, 0, 2, "a^2->L"); // Forget if 2
-    sys.addRule(3, 1, 0, 0, 1, "a->L");   // Forget if 1
+    // --- 2. Create Rules ---
 
-    // Sorter s2 (4): Detects 2 spikes
-    sys.addRule(4, 3, 0, 0, 3, "a^3->L"); // Forget if 3 (Too many)
-    sys.addRule(4, 2, 1, 0, 2, "a^2->a"); // Fire if 2
-    sys.addRule(4, 1, 0, 0, 1, "a->L");   // Forget if 1
+    // A. Input Neurons: "a*/a -> a;0"
+    for(int i = 0; i < N; ++i) {
+        sys.addRule(startInput + i, 1, 1, 0, 1, "a*->a");
+        sys.setSpikes(startInput + i, inputNumbers[i]); // Load Data
+    }
 
-    // Sorter s3 (5): Detects 1 spike
-    sys.addRule(5, 3, 0, 0, 3, "a^3->L"); // Forget if 3
-    sys.addRule(5, 2, 0, 0, 2, "a^2->L"); // Forget if 2
-    sys.addRule(5, 1, 1, 0, 1, "a->a");   // Fire if 1
+    // B. Sorter Neurons
+    // Sorter s (at index s) corresponds to checking for `target` spikes.
+    // target = N - s. (e.g., if N=4, s=0 checks for 4, s=3 checks for 1)
+    for(int s = 0; s < N; ++s) {
+        int sorterID = startSorter + s;
+        int target = N - s; 
+
+        // 1. FORGET rules for spikes > target
+        // We need rules for target+1 up to N (max possible spikes received)
+        for(int k = N; k > target; --k) {
+            sys.addRule(sorterID, k, 0, 0, k, "forget_high");
+        }
+
+        // 2. FIRE rule for exactly `target` spikes
+        // a^k -> a;0
+        sys.addRule(sorterID, target, 1, 0, target, "fire_exact");
+
+        // 3. FORGET rules for spikes < target
+        // a^(target-1) -> lambda ... a -> lambda
+        // Just adding one rule "a -> lambda" with priority lower than above is sufficient
+        // IF we add them in correct order. But our engine is greedy.
+        // We must add explicit rules for k = target-1 down to 1.
+        for(int k = target - 1; k >= 1; --k) {
+            sys.addRule(sorterID, k, 0, 0, k, "forget_low");
+        }
+    }
 
     sys.buildMatrix();
 
-    // --- 3. Initial State (1, 3, 2) ---
-    sys.setSpikes(0, 6); // i1
-    sys.setSpikes(1, 10); // i2
-    sys.setSpikes(2, 2); // i3
+    // --- 3. Run Simulation ---
+    std::cout << "--- Sorting Array: { ";
+    for(int n : inputNumbers) std::cout << n << " ";
+    std::cout << "} ---\n";
+    
+    int maxVal = 0;
+    for(int n : inputNumbers) if(n > maxVal) maxVal = n;
+    int ticksToRun = maxVal + 2; // Need enough ticks to drain inputs
 
-    std::cout << "--- Sorting Inputs: 1, 3, 2 ---\n";
-    std::cout << "Outputs should settle to: Min(1), Med(2), Max(3)\n\n";
-
-    // Run for 5 ticks (enough to drain i2's 3 spikes)
-    for(int t=0; t<100; ++t) {
-        std::cout << "Tick " << t << " | ";
-        
-        // Inputs
-        std::cout << "i: " << sys.getSpikes(0) << "," << sys.getSpikes(1) << "," << sys.getSpikes(2) << " | ";
-        
-        // Sorters (Transient)
-        std::cout << "s: " << sys.getSpikes(3) << "," << sys.getSpikes(4) << "," << sys.getSpikes(5) << " | ";
-        
-        // Outputs (Accumulated)
-        std::cout << "OUT: "
-                  << "o1(Min)=" << sys.getSpikes(6) << " "
-                  << "o2(Med)=" << sys.getSpikes(7) << " "
-                  << "o3(Max)=" << sys.getSpikes(8) << "\n";
-
+    for(int t = 0; t < ticksToRun; ++t) {
         sys.step(t);
+    }
+
+    std::cout << "\nFinal Sorted Output:\n";
+    for(int o = 0; o < N; ++o) {
+        std::cout << "Position " << (o+1) << ": " << sys.getSpikes(startOutput + o) << "\n";
     }
 
     return 0;
