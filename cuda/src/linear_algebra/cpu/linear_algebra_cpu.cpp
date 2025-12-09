@@ -1,4 +1,4 @@
-#include "linear_algebra_cpu.h"
+#include "distributed_snp/linear_algebra/cpu_backend.h"
 #include <stdio.h>
 #include <cstring>
 

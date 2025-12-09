@@ -1,4 +1,5 @@
-#include "linear_algebra/linear_algebra.h"
+#include "distributed_snp/linear_algebra/linear_algebra.h"
+#include "distributed_snp/linear_algebra/matrix_ops.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -8,9 +9,9 @@
 
 // Include the appropriate implementation based on what's being compiled
 #ifdef ENABLE_GPU
-    #include "linear_algebra/gpu/linear_algebra_gpu.h"
+    #include "distributed_snp/linear_algebra/gpu_backend.h"
 #else
-    #include "linear_algebra/cpu/linear_algebra_cpu.h"
+    #include "distributed_snp/linear_algebra/cpu_backend.h"
 #endif
 
 // Get current time in seconds (with microsecond precision)
@@ -18,37 +19,6 @@ double getTime() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return tv.tv_sec + tv.tv_usec * 1e-6;
-}
-
-// Initialize matrix with random floating-point numbers
-void initializeMatrix(float* matrix, int rows, int cols, unsigned int seed) {
-    srand(seed);
-    for (int i = 0; i < rows * cols; i++) {
-        matrix[i] = (float)rand() / (float)RAND_MAX * 10.0f; // Random values [0, 10)
-    }
-}
-
-// Print a matrix (for debugging small matrices)
-void printMatrix(const float* matrix, int rows, int cols, const char* name) {
-    printf("\nMatrix %s (%dx%d):\n", name, rows, cols);
-    
-    // Only print small matrices to avoid flooding the output
-    int maxPrint = 10;
-    int printRows = rows < maxPrint ? rows : maxPrint;
-    int printCols = cols < maxPrint ? cols : maxPrint;
-    
-    for (int i = 0; i < printRows; i++) {
-        for (int j = 0; j < printCols; j++) {
-            printf("%8.3f ", matrix[i * cols + j]);
-        }
-        if (cols > maxPrint) printf("...");
-        printf("\n");
-    }
-    
-    if (rows > maxPrint) {
-        printf("...\n");
-    }
-    printf("\n");
 }
 
 int main(int argc, char** argv) {

@@ -1,4 +1,4 @@
-#include "mpi_utils.h"
+#include "distributed_snp/linear_algebra/mpi_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 

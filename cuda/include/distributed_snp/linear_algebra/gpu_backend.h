@@ -1,7 +1,7 @@
 #ifndef LINEAR_ALGEBRA_GPU_H
 #define LINEAR_ALGEBRA_GPU_H
 
-#include "../linear_algebra.h"
+#include "linear_algebra.h"
 
 namespace LinAlg {
     // GPU-based matrix multiplication implementation using CUDA

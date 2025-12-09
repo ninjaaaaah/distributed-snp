@@ -1,5 +1,5 @@
-#include "linear_algebra_gpu.h"
-#include "cuda_utils.h"
+#include "distributed_snp/linear_algebra/gpu_backend.h"
+#include "distributed_snp/common/cuda_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <cstring>

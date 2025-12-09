@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 #include "rule.h"
-#include "../linear_algebra/linear_algebra.h"
+#include "distributed_snp/linear_algebra/linear_algebra.h"
 
 class SNPSystem {
 private:

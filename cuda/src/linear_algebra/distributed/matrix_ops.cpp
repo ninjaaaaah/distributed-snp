@@ -1,4 +1,4 @@
-#include "matrix_ops.h"
+#include "distributed_snp/linear_algebra/matrix_ops.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>

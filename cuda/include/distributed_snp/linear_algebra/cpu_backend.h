@@ -1,7 +1,7 @@
 #ifndef LINEAR_ALGEBRA_CPU_H
 #define LINEAR_ALGEBRA_CPU_H
 
-#include "../linear_algebra.h"
+#include "linear_algebra.h"
 
 namespace LinAlg {
     // CPU-based matrix multiplication implementation

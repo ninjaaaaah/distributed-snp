@@ -1,7 +1,7 @@
 #ifndef LINEAR_ALGEBRA_DISTRIBUTED_H
 #define LINEAR_ALGEBRA_DISTRIBUTED_H
 
-#include "../cpu/linear_algebra_cpu.h"
+#include "cpu_backend.h"
 
 namespace LinAlg {
     // Distributed matrix multiplication implementation using MPI

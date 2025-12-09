@@ -1,5 +1,5 @@
-#include "sorting.h"
-#include "snp_system.h"
+#include "distributed_snp/snp/sorting.h"
+#include "distributed_snp/snp/system.h"
 #include <iostream>
 #include <algorithm>
 
@@ -69,17 +69,17 @@ std::vector<int> runSort(const std::vector<int>& inputNumbers) {
 
     // --- D. Collect Results ---
     std::vector<int> result;
-    std::cout << "Original Array: [ ";
-    for(int n : inputNumbers) std::cout << n << " ";
-    std::cout << "]\n";
+    // std::cout << "Original Array: [ ";
+    // for(int n : inputNumbers) std::cout << n << " ";
+    // std::cout << "]\n";
 
-    std::cout << "Sorted Array:   [ ";
+    // std::cout << "Sorted Array:   [ ";
     for(int o = 0; o < N; ++o) {
         int val = sys.getSpikes(startOutput + o);
         result.push_back(val);
-        std::cout << val << " ";
+        // std::cout << val << " ";
     }
-    std::cout << "]\n-------------------------------\n";
+    // std::cout << "]\n-------------------------------\n";
     
     return result;
 }

@@ -1,6 +1,6 @@
-#include "mpi_utils.h"
-#include "cuda_utils.h"
-#include "matrix_ops.h"
+#include "distributed_snp/linear_algebra/mpi_utils.h"
+#include "distributed_snp/common/cuda_utils.h"
+#include "distributed_snp/linear_algebra/matrix_ops.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>

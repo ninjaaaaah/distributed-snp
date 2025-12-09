@@ -1,4 +1,4 @@
-#include "linear_algebra_distributed.h"
+#include "distributed_snp/linear_algebra/dist_backend.h"
 #include <stdio.h>
 
 namespace LinAlg {

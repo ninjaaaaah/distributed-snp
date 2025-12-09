@@ -33,6 +33,49 @@ cuda/
 └── build/                # Compiled executables (auto-generated)
 ```
 
+## Benchmarking
+
+You can run benchmarks to evaluate the performance of the SNP sorting algorithm across different backends (CPU, GPU, Distributed).
+
+### Run Benchmarks
+
+You can use the `make` command from the `cuda/` directory to build and run the benchmarks.
+
+1.  **CPU Benchmark**:
+    ```bash
+    make run-snp-cpu <N>
+    ```
+    *   `<N>`: Number of elements to sort (default: 10)
+
+2.  **GPU Benchmark**:
+    ```bash
+    make run-snp-gpu <N>
+    ```
+
+3.  **Distributed Benchmark**:
+    ```bash
+    make run-snp-dist <N>
+    ```
+
+**Example:**
+```bash
+# Run GPU benchmark with 100 elements
+make run-snp-gpu 100
+```
+
+### Manual Build & Run
+
+Alternatively, you can build and run manually:
+
+```bash
+cd build
+cmake ..
+make
+
+# Run CPU benchmark
+./snp_benchmark_cpu 50
+```
+
 ## Prerequisites
 
 ### Software Requirements

@@ -1,11 +1,11 @@
-#include "snp_system.h"
-#include "../linear_algebra/linear_algebra.h"
+#include "distributed_snp/snp/system.h"
+#include "distributed_snp/linear_algebra/linear_algebra.h"
 #ifdef USE_GPU
-#include "../linear_algebra/gpu/linear_algebra_gpu.h"
+#include "distributed_snp/linear_algebra/gpu_backend.h"
 #elif defined(USE_DISTRIBUTED)
-#include "../linear_algebra/distributed/linear_algebra_distributed.h"
+#include "distributed_snp/linear_algebra/dist_backend.h"
 #else
-#include "../linear_algebra/cpu/linear_algebra_cpu.h"
+#include "distributed_snp/linear_algebra/cpu_backend.h"
 #endif
 #include <iostream>
 #include <algorithm>

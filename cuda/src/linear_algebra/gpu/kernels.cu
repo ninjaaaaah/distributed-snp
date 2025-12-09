@@ -1,4 +1,4 @@
-#include "cuda_utils.h"
+#include "distributed_snp/common/cuda_utils.h"
 #include <stdio.h>
 
 // CUDA kernel for matrix multiplication
@@ -73,27 +73,4 @@ void matrixMultiplyCUDA(const float* d_A, const float* d_B, float* d_C,
     
     // Check for kernel launch errors
     CUDA_CHECK_KERNEL();
-}
-
-// Initialize CUDA device
-void initializeCUDA() {
-    int deviceCount;
-    CUDA_CHECK(cudaGetDeviceCount(&deviceCount));
-    
-    if (deviceCount == 0) {
-        fprintf(stderr, "No CUDA devices found\n");
-        exit(EXIT_FAILURE);
-    }
-    
-    // Use device 0
-    CUDA_CHECK(cudaSetDevice(0));
-    
-    // Get device properties
-    cudaDeviceProp prop;
-    CUDA_CHECK(cudaGetDeviceProperties(&prop, 0));
-    
-    printf("Using CUDA device: %s (Compute %d.%d)\n",
-           prop.name, prop.major, prop.minor);
-    printf("Total Global Memory: %.2f GB\n",
-           prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
 }

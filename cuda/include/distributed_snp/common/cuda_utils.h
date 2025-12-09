@@ -3,6 +3,7 @@
 
 #include <cuda_runtime.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // CUDA error checking macro
 #define CUDA_CHECK(call) \
@@ -31,6 +32,7 @@
 void matrixMultiplyCUDA(const float* d_A, const float* d_B, float* d_C,
                         int rowsA, int colsA, int colsB);
 
-void initializeCUDA();
+// Initialize CUDA with optional rank (default -1 for non-distributed)
+void initializeCUDA(int rank = -1);
 
 #endif // CUDA_UTILS_H
