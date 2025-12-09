@@ -139,213 +139,149 @@ public:
                 }
             }
         }
+        
+        std::cout << C.size() << std::endl; 
+        std::cout << St.size() << std::endl; 
+        std::cout << Iv.size() << std::endl; 
+        std::cout << Dv.size() << std::endl; 
+        std::cout << DIv.size() << std::endl; 
+        std::cout << DSv.size() << std::endl; 
+        std::cout << neuronToRules.size() << std::endl;
+        std::cout << ruleList.size() << std::endl;
+        std::cout << M.size() << std::endl;
     }
 
-    // The Main Simulation Step
-    void step(int tick) {
-        std::cout << "\n--- Calculation for Tick " << tick << " ---\n";
-
-        // 0. Update Status Vector (St)
-        // A neuron is closed (0) if any of its rules are currently delayed (DSv > 0)
-        // [cite: 114, 288]
+    void step() {
         std::fill(St.begin(), St.end(), 1);
         for(int i=0; i<m_neurons; ++i) {
-            for(int rId : neuronToRules[i]) {
-                if(DSv[rId] > 0) {
-                    St[i] = 0;
-                    break;
-                }
-            }
+            for(int rId : neuronToRules[i]) if(DSv[rId] > 0) { St[i] = 0; break; }
         }
 
-        // 1. Calculate Decision Vector (Dv) [cite: 130]
-        // Which rules CAN fire and are CHOSEN?
         std::fill(Dv.begin(), Dv.end(), 0);
         for (int i = 0; i < m_neurons; ++i) {
-            if (St[i] == 0) continue; // Closed neurons cannot decide to fire
-
-            // Logic: Find applicable rules (C >= E)
+            if (St[i] == 0) continue;
             for (int rId : neuronToRules[i]) {
                 if (C[i] >= ruleList[rId].minSpikes) {
-                    Dv[rId] = 1; 
-                    break; // Deterministic: Pick first valid rule (Simplification)
+                    Dv[rId] = 1; break; 
                 }
             }
         }
 
-        // 2. Compute Indicator Vector (Iv)
-        // Algorithm 1[cite: 770]: Iv = (Dv OR DIv) AND (NOT DSv)
-        // Rules that are either chosen now or were waiting, AND have 0 delay left.
         for(int i=0; i<n_rules; ++i) {
             bool active = (Dv[i] == 1) || (DIv[i] == 1);
-            bool ready = (DSv[i] == 0);
-            Iv[i] = (active && ready) ? 1 : 0;
-        }
-
-        // 3. Compute Delayed Indicator Vector (DIv)
-        // Algorithm 2 [cite: 783]
-        for(int i=0; i<n_rules; ++i) {
-            // Keep waiting if in DIv but not firing yet
+            Iv[i] = (active && (DSv[i] == 0)) ? 1 : 0;
             bool keepWaiting = (DIv[i] == 1 && Iv[i] == 0);
-            // Start waiting if chosen and has delay
             bool startWaiting = (Dv[i] == 1 && ruleList[i].delay > 0);
-            
             DIv[i] = (keepWaiting || startWaiting) ? 1 : 0;
         }
 
-        // 4. Calculate Next Configuration (C)
-        // Algorithm 3 / Definition 10 
-        // Formula: C_new = C + St * (Iv * M + STv)
-        
-        // A. Generic Matrix Multiplication: NetGain = Iv * M
-        std::vector<int> netGainFromRules = LinAlg::multiplyVectorMatrix(Iv, M);
+        std::vector<int> netGain = LinAlg::multiplyVectorMatrix(Iv, M);
+        std::vector<int> totalInflow = LinAlg::addVectors(netGain, STv);
+        std::vector<int> effectiveGain = LinAlg::hadamardProduct(St, totalInflow);
+        C = LinAlg::addVectors(C, effectiveGain);
 
-        // B. Add Input Spike Train: TotalGain = NetGain + STv
-        std::vector<int> totalGain = LinAlg::addVectors(netGainFromRules, STv);
-
-        // C. Apply Status Mask (Hadamard): FilteredGain = St * TotalGain
-        // "Closed nodes... spikes are dropped and lost" [cite: 287]
-        std::vector<int> filteredGain = LinAlg::hadamardProduct(St, totalGain);
-
-        // D. Final Update: C = C + FilteredGain
-        C = LinAlg::addVectors(C, filteredGain);
-
-
-        // 5. Update Delay Status Vector (DSv)
-        // Algorithm 4 [cite: 824]
         for(int i=0; i<n_rules; ++i) {
-            if (DSv[i] > 0) DSv[i]--; // Decrement timer
-
-            // If rule chosen and has delay, set timer
+            if (DSv[i] > 0) DSv[i]--;
             if (Dv[i] == 1 && ruleList[i].delay > 0) {
-                DSv[i] = ruleList[i].delay; 
-                
-                // Lock sibling rules (Neuron becomes closed)
+                DSv[i] = ruleList[i].delay;
                 int nIdx = ruleList[i].neuronIdx;
-                for(int sib : neuronToRules[nIdx]) {
-                    DSv[sib] = ruleList[i].delay;
-                }
+                for(int sib : neuronToRules[nIdx]) DSv[sib] = ruleList[i].delay;
             }
         }
-
-        // --- Debug Output ---
-        std::cout << "Tick " << std::setw(2) << tick << " | ";
-        std::cout << "In(STv): " << STv[0] << " | ";
-        std::cout << "Spikes: ";
-        std::cout << "one: " << C[0] << "  ";
-        std::cout << "both: " << C[1] << "  ";
-        std::cout << "MAX: " << C[2] << "  ";
-        std::cout << "MIN: " << C[3] << "\n";
     }
 };
 
 // =========================================================
-// 3. Dynamic Sorting Builder
+// 3. Sorting Abstraction
 // =========================================================
-int main() {
-    // --- User Configuration ---
-    std::vector<int> inputNumbers = { 
-                                    530, 225, 726, 148, 61, 137, 659, 153, 743, 131, 171, 126, 834, 359, 266, 50, 639, 857, 647, 492, 43, 879, 559, 916, 812, 725, 19, 177, 98, 280, 409, 458, 583, 275, 890, 747, 112, 775, 63, 384, 376, 240, 109, 514, 915, 572, 435, 680, 182, 638, 935, 291, 955, 520, 426, 389, 622, 566, 592, 419, 482, 40, 100, 826, 770, 599, 345, 274, 620, 786, 54, 709, 848, 443, 16, 204, 489, 253, 396, 14, 538, 544, 994, 468, 328, 721, 288, 586, 439, 390, 909, 626, 121, 296, 625, 329, 907, 875, 367, 684
-                                 }; // Change this array to sort different sets
-    int N = inputNumbers.size();
-    
-    // Calculate total neurons needed
-    // Inputs (N) + Sorters (N) + Outputs (N)
-    int totalNeurons = 3 * N;
-    SNPSystem sys(totalNeurons);
 
-    // ID Ranges
+std::vector<int> runSort(const std::vector<int>& inputNumbers) {
+    int N = inputNumbers.size();
+    if (N == 0) return {};
+
+    // Determine max value to calculate simulation ticks needed
+    int maxVal = 0;
+    for(int n : inputNumbers) if(n > maxVal) maxVal = n;
+    
+    // Layout: [ Inputs (0..N-1) | Sorters (N..2N-1) | Outputs (2N..3N-1) ]
     int startInput = 0;
     int startSorter = N;
     int startOutput = 2 * N;
+    int totalNeurons = 3 * N;
 
-    // --- 1. Construct Topology ---
-    
-    // A. Connect Inputs to ALL Sorters
-    for(int i = 0; i < N; ++i) {       // Input i
-        for(int s = 0; s < N; ++s) {   // Sorter s
+    SNPSystem sys(totalNeurons);
+
+    // --- A. Build Topology ---
+    // Inputs -> All Sorters
+    for(int i = 0; i < N; ++i) {
+        for(int s = 0; s < N; ++s) {
             sys.addSynapse(startInput + i, startSorter + s);
         }
     }
 
-    // B. Connect Sorters to Outputs
-    // Sorter k (detects k spikes) connects to outputs [k...N] (Median/Max logic)
-    // IMPORTANT: The paper's logic is inverted in indexing vs standard array.
-    // If we have 4 numbers, Sorter 4 (detects 4 spikes) is the "Min" detector.
-    // It should connect to Output 1 (Min), Output 2, Output 3, Output 4.
-    // Sorter 1 (detects 1 spike) is the "Max" detector. It connects ONLY to Output 4 (Max).
-    
-    // We map: Sorter s (0..N-1) corresponds to detecting (N-s) spikes.
-    // Wait, let's stick to the paper's diagram logic exactly:
-    // s1 (detects N spikes) -> connects to o1...oN
-    // sN (detects 1 spike)  -> connects to oN
-    
+    // Sorters -> Outputs
+    // Sorter s (detects N-s spikes) connects to Outputs [s...N-1]
     for(int s = 0; s < N; ++s) {
-        int sorterID = startSorter + s;
-        // This sorter detects (N - s) spikes.
-        // Let's call index 0 "s1" (detects N), index N-1 "sN" (detects 1)
-        
-        // s1 connects to o1...oN
-        // s2 connects to o2...oN
         for(int o = s; o < N; ++o) {
-            sys.addSynapse(sorterID, startOutput + o);
+            sys.addSynapse(startSorter + s, startOutput + o);
         }
     }
 
-    // --- 2. Create Rules ---
-
-    // A. Input Neurons: "a*/a -> a;0"
+    // --- B. Define Rules ---
+    // Input Streams
     for(int i = 0; i < N; ++i) {
-        sys.addRule(startInput + i, 1, 1, 0, 1, "a*->a");
-        sys.setSpikes(startInput + i, inputNumbers[i]); // Load Data
+        sys.addRule(startInput + i, 1, 1, 0, 1, "stream");
+        sys.setSpikes(startInput + i, inputNumbers[i]); 
     }
 
-    // B. Sorter Neurons
-    // Sorter s (at index s) corresponds to checking for `target` spikes.
-    // target = N - s. (e.g., if N=4, s=0 checks for 4, s=3 checks for 1)
+    // Sorters
     for(int s = 0; s < N; ++s) {
         int sorterID = startSorter + s;
-        int target = N - s; 
+        int target = N - s;
 
-        // 1. FORGET rules for spikes > target
-        // We need rules for target+1 up to N (max possible spikes received)
-        for(int k = N; k > target; --k) {
+        // 1. Forget High (Greedy priority)
+        for(int k = N; k > target; --k) 
             sys.addRule(sorterID, k, 0, 0, k, "forget_high");
-        }
-
-        // 2. FIRE rule for exactly `target` spikes
-        // a^k -> a;0
+        
+        // 2. Fire Exact
         sys.addRule(sorterID, target, 1, 0, target, "fire_exact");
 
-        // 3. FORGET rules for spikes < target
-        // a^(target-1) -> lambda ... a -> lambda
-        // Just adding one rule "a -> lambda" with priority lower than above is sufficient
-        // IF we add them in correct order. But our engine is greedy.
-        // We must add explicit rules for k = target-1 down to 1.
-        for(int k = target - 1; k >= 1; --k) {
+        // 3. Forget Low
+        for(int k = target - 1; k >= 1; --k)
             sys.addRule(sorterID, k, 0, 0, k, "forget_low");
-        }
     }
 
     sys.buildMatrix();
 
-    // --- 3. Run Simulation ---
-    std::cout << "--- Sorting Array: { ";
+    // --- C. Execute ---
+    int ticks = maxVal + 3; // Buffer for signal propagation
+    for(int t = 0; t < ticks; ++t) {
+        sys.step();
+    }
+
+    // --- D. Collect Results ---
+    std::vector<int> result;
+    std::cout << "Original Array: [ ";
     for(int n : inputNumbers) std::cout << n << " ";
-    std::cout << "} ---\n";
-    
-    int maxVal = 0;
-    for(int n : inputNumbers) if(n > maxVal) maxVal = n;
-    int ticksToRun = maxVal + 2; // Need enough ticks to drain inputs
+    std::cout << "]\n";
 
-    for(int t = 0; t < ticksToRun; ++t) {
-        sys.step(t);
-    }
-
-    std::cout << "\nFinal Sorted Output:\n";
+    std::cout << "Sorted Array:   [ ";
     for(int o = 0; o < N; ++o) {
-        std::cout << "Position " << (o+1) << ": " << sys.getSpikes(startOutput + o) << "\n";
+        int val = sys.getSpikes(startOutput + o);
+        result.push_back(val);
+        std::cout << val << " ";
     }
+    std::cout << "]\n-------------------------------\n";
+    
+    return result;
+}
+
+// =========================================================
+// 4. Main
+// =========================================================
+int main() {
+    // Test Case 1
+    std::vector<int> sorted1 = runSort({ 445, 179, 305, 544, 240, 397, 372, 848, 710, 497, 707, 288, 682, 470, 247, 690, 206, 64, 956, 741 });
 
     return 0;
 }
