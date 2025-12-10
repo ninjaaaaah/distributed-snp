@@ -1,5 +1,8 @@
 {
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestArgs": ["src"]
+  "python.testing.pytestArgs": [
+    "src"
+  ],
+  "cmake.sourceDirectory": "/home/shared/distributed-snp/cuda"
 }
